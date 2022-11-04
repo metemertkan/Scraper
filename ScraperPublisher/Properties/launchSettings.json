@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ScraperPublisher": {
+      "commandName": "Project"
+    },
+    "Docker": {
+      "commandName": "Docker"
+    }
+  }
+}

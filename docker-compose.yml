@@ -1,0 +1,73 @@
+version: '3.4'
+
+services:
+  scraper:
+    image: ${DOCKER_REGISTRY-}scraper
+    depends_on:
+        - db
+    build:
+      context: .
+      dockerfile: Scraper/Dockerfile
+  db:
+    image: mysql:5.7
+    restart: always
+    environment:
+        MYSQL_DATABASE: 'db'
+        MYSQL_USER: 'user'
+        MYSQL_PASSWORD: 'password'
+        MYSQL_ROOT_PASSWORD: 'password'
+    ports:
+        - '3306:3306'
+    expose:
+        - '3306'
+    volumes:
+        - type: bind
+          source: /E/Projects/RTL/Scraper/mysql
+          target: /var/lib/mysql
+  webapi:
+    image: ${DOCKER_REGISTRY-}webapi
+    depends_on:
+        - db
+    build:
+      context: .
+      dockerfile: WebApi/Dockerfile
+  cache:
+    image: redis:latest
+    restart: always
+    ports:
+      - '6379:6379'
+    volumes: 
+      - type: bind
+        source: /E/Projects/RTL/Scraper/redis
+        target: /data
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+        - RABBITMQ_DEFAULT_USER=user
+        - RABBITMQ_DEFAULT_PASS=password
+    ports:
+        - 5672:5672
+        - 15672:15672
+    volumes:
+      - type: bind
+        source: /E/Projects/RTL/Scraper/rabbitmq/data
+        target: /var/lib/rabbitmq/
+      - type: bind
+        source: /E/Projects/RTL/Scraper/rabbitmq/log
+        target: /var/log/rabbitmq
+  scraperpublisher:
+    image: ${DOCKER_REGISTRY-}scraperpublisher
+    depends_on:
+        - db
+    build:
+      context: .
+      dockerfile: ScraperPublisher/Dockerfile
+  scrapersubscriber:
+    image: ${DOCKER_REGISTRY-}scrapersubscriber
+    depends_on:
+        - db
+        - rabbitmq
+    build:
+      context: .
+      dockerfile: ScraperSubscriber/Dockerfile
+
