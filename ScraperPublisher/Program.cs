@@ -1,12 +1,29 @@
-﻿using Newtonsoft.Json;
+﻿
+using Newtonsoft.Json;
 using Polly;
 using RabbitMQ.Client;
+using RabbitMQ.Client.Exceptions;
 using Shared.Event;
 using Shared.Input;
 using System.Net.Http.Json;
 using System.Text;
 
-var factory = new ConnectionFactory() { HostName = "rabbitmq", UserName = "user", Password ="password"};
+var factory = new ConnectionFactory() { HostName = "rabbitmq", UserName = "user", Password = "password" };
+
+
+var policy = Policy<bool>.Handle<HttpRequestException>(ex => ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests).WaitAndRetryForeverAsync(
+attempt => TimeSpan.FromMilliseconds(
+10 * Math.Pow(2, attempt)));
+
+
+var fallbackPolicyOnNotFound = Policy<bool>.Handle<HttpRequestException>(ex => ex.StatusCode == System.Net.HttpStatusCode.NotFound).FallbackAsync(async ct =>
+{
+    Console.WriteLine("Got 404 stopping");
+    return await Task.FromResult(true);
+});
+
+var policyWrap = fallbackPolicyOnNotFound.WrapAsync(policy);
+
 using (var connection = factory.CreateConnection())
 using (var channel = connection.CreateModel())
 {
@@ -20,19 +37,6 @@ using (var channel = connection.CreateModel())
     {
         BaseAddress = new Uri("https://api.tvmaze.com/")
     };
-
-    var policy = Policy<bool>.Handle<HttpRequestException>(ex => ex.StatusCode == System.Net.HttpStatusCode.TooManyRequests).WaitAndRetryForeverAsync(
-        attempt => TimeSpan.FromMilliseconds(
-        10 * Math.Pow(2, attempt)));
-
-
-    var fallbackPolicyOnNotFound = Policy<bool>.Handle<HttpRequestException>(ex => ex.StatusCode == System.Net.HttpStatusCode.NotFound).FallbackAsync(async ct =>
-    {
-        Console.WriteLine("Got 404 stopping");
-        return await Task.FromResult(true);
-    });
-
-    var policyWrap = fallbackPolicyOnNotFound.WrapAsync(policy);
 
     var pageNumber = 0;
     var internalCancel = false;
@@ -49,12 +53,11 @@ using (var channel = connection.CreateModel())
 
             await Parallel.ForEachAsync(result, parallelOptions, async (item, token) =>
             {
-                Console.Write($"Show Id: {item.Id} ");
 
                 await policy.ExecuteAsync(async () =>
                 {
                     var castResult = await httpClient.GetFromJsonAsync<List<Cast>>($"shows/{item.Id}/cast");
-                  
+
                     var dbShow = new EventShow
                     {
                         Id = item.Id,
@@ -76,14 +79,18 @@ using (var channel = connection.CreateModel())
 
             });
 
-
             return await Task.FromResult(false);
         });
         pageNumber++;
     }
 
-
-
- 
-
 }
+
+
+
+
+
+
+
+
+
