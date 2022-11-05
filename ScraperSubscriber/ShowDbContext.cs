@@ -9,7 +9,7 @@ namespace ScraperSubscriber
         public DbSet<DbShow> Shows { get; set; }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseMySQL("server=localhost;database=shows;user=root;password=password");
+            optionsBuilder.UseMySQL("server=db;database=shows4;user=root;password=password");
             optionsBuilder.EnableSensitiveDataLogging();
         }
     }

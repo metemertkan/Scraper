@@ -10,7 +10,7 @@ using System.Text;
 using var dbContext = new ShowDbContext();
 dbContext.Database.EnsureCreated();
 
-var factory = new ConnectionFactory() { HostName = "localhost", UserName = "user", Password = "password" };
+var factory = new ConnectionFactory() { HostName = "rabbitmq", UserName = "user", Password = "password" };
 using (var connection = factory.CreateConnection())
 using (var channel = connection.CreateModel())
 {
@@ -21,13 +21,12 @@ using (var channel = connection.CreateModel())
                          arguments: null);
 
     var consumer = new EventingBasicConsumer(channel);
-    consumer.Received += async (model, ea) =>
+    consumer.Received += (model, ea) =>
     {
         var body = ea.Body.ToArray();
         var message = Encoding.UTF8.GetString(body);
         var show = JsonConvert.DeserializeObject<EventShow>(message);
-
-        var foundShow = await dbContext.Shows.FirstOrDefaultAsync(x => x.Id.Equals(show.Id));
+        var foundShow =  dbContext.Shows.FirstOrDefault(x => x.Id.Equals(show.Id));
 
         if (foundShow is null)
         {
@@ -39,7 +38,7 @@ using (var channel = connection.CreateModel())
 
             foreach (var cast in show.Casts)
             {
-                var foundCast = await dbContext.Casts.FirstOrDefaultAsync(x => x.Id.Equals(cast.Id));
+                var foundCast =  dbContext.Casts.FirstOrDefault(x => x.Id.Equals(cast.Id));
                 if (foundCast is null)
                 {
                     dbShow.Cast.Add(new DbCast { Id = cast.Id, Name = cast.Name, Birthday = cast.Birthday });
@@ -52,15 +51,15 @@ using (var channel = connection.CreateModel())
                     }
                 }
             }
-            await dbContext.AddAsync(dbShow);
-            await dbContext.SaveChangesAsync();
-
-
-            Console.WriteLine(" [x] Received {0}", message);
-        };
-
-        channel.BasicConsume(queue: "shows",
-                             autoAck: true,
-                             consumer: consumer);
+             dbContext.Add(dbShow);
+             dbContext.SaveChanges();
+        }
+        Console.WriteLine(" [x] Received {0}", message);
     };
+    channel.BasicConsume(queue: "shows",
+                         autoAck: true,
+                         consumer: consumer);
+
+    Console.WriteLine(" Press [enter] to exit.");
+    Console.ReadLine();
 }
